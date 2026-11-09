@@ -18,6 +18,7 @@ export class BattleController extends Component {
     private hero = 0;
     private slime = 0;
     private turn = 0;
+    private slimeCharging = false;
     private rage = 0;
     private locked = false;
     private messages: string[] = [];
@@ -50,6 +51,7 @@ export class BattleController extends Component {
         this.hero = battleConfig.hero.hp;
         this.slime = battleConfig.slime.hp;
         this.turn = 0;
+        this.slimeCharging = false;
         this.rage = 0;
         this.locked = false;
         this.messages = ['史莱姆出现了！勇者先行动。'];
@@ -60,21 +62,23 @@ export class BattleController extends Component {
         if (this.locked || this.hero === 0 || this.slime === 0) return;
         if (action === 'charge' && this.rage < battleConfig.rage.max) return;
         const defending = action === 'defend';
+        const heavy = this.slimeCharging;
+        const interrupted = action === 'charge' && heavy;
+        this.slimeCharging = false;
         this.locked = true;
         this.turn++;
 
         let strike = 0;
-        if (action === 'attack') strike = this.roll(battleConfig.hero.damage);
+        if (!defending) strike = interrupted ? battleConfig.rage.chargedDamage : this.roll(battleConfig.hero.damage);
         if (action === 'charge') {
-            strike = battleConfig.rage.chargedDamage;
             this.rage = 0;
         }
         this.slime = Math.max(0, this.slime - strike);
         let message = defending ? '勇者防御' : `勇者攻击，造成 ${strike} 点伤害`;
         if (action === 'charge') message = `勇者蓄力攻击，造成 ${strike} 点伤害`;
-        if (this.slime > 0) {
-            const { damage: range, heavyEvery, heavyMultiplier } = battleConfig.slime;
-            const heavy = this.turn % heavyEvery === 0;
+        if (interrupted) message += '，打断史莱姆重击！';
+        if (this.slime > 0 && !interrupted) {
+            const { damage: range, heavyMultiplier } = battleConfig.slime;
             const strikeBack = this.roll(range) * (heavy ? heavyMultiplier : 1);
             const damage = defending ? Math.ceil(strikeBack * battleConfig.defenseMultiplier) : strikeBack;
             const hpLost = Math.min(this.hero, damage);
@@ -87,6 +91,7 @@ export class BattleController extends Component {
         }
         this.messages.push(...message.split('\n'));
         if (this.hero > 0 && this.slime > 0 && (this.turn + 1) % battleConfig.slime.heavyEvery === 0) {
+            this.slimeCharging = true;
             this.messages.push('史莱姆正在蓄力，下回合将发动重击！');
         }
         if (this.slime === 0) this.messages.push('胜利！勇者击败了史莱姆。');
