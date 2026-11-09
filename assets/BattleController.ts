@@ -3,6 +3,7 @@ import { battleConfig } from './BattleConfig';
 
 const buttonColor = new Color(54, 89, 138);
 const disabledButtonColor = new Color(75, 75, 75);
+const chargingNameColor = new Color(255, 105, 105);
 
 @_decorator.ccclass('BattleController')
 export class BattleController extends Component {
@@ -10,6 +11,7 @@ export class BattleController extends Component {
     private heroHP: Label;
     private rageLabel: Label;
     private slimeHP: Label;
+    private slimeName: Label;
     private log: Label;
     private attack: Button;
     private defend: Button;
@@ -35,7 +37,8 @@ export class BattleController extends Component {
         this.label(this.ui, 'SlimeMark', '●', 155, 113, 42, new Color(144, 237, 170));
         this.heroHP = this.label(this.ui, 'HeroHP', '', -155, 62, 26);
         this.rageLabel = this.label(this.ui, 'Rage', '', -155, 32, 20);
-        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 155, 62, 26);
+        this.slimeName = this.label(this.ui, 'SlimeName', '史莱姆', 94, 62, 26);
+        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 205, 62, 26);
         this.panel(this.ui, 'LogPanel', 0, -71, 580, 140, new Color(26, 33, 46));
         this.label(this.ui, 'LogTitle', '战斗日志', 0, -23, 22, new Color(184, 203, 226));
         this.log = this.label(this.ui, 'BattleLog', '', 0, -88, 24);
@@ -109,7 +112,8 @@ export class BattleController extends Component {
     private render() {
         this.heroHP.string = `勇者   HP ${this.hero} / ${battleConfig.hero.hp}`;
         this.rageLabel.string = `怒气 ${this.rage}/${battleConfig.rage.max}`;
-        this.slimeHP.string = `史莱姆   HP ${this.slime} / ${battleConfig.slime.hp}`;
+        this.slimeName.color = this.slimeCharging ? chargingNameColor : Color.WHITE;
+        this.slimeHP.string = `HP ${this.slime} / ${battleConfig.slime.hp}`;
         this.messages = this.messages.slice(-3);
         this.log.string = this.messages.join('\n');
         const ended = this.hero === 0 || this.slime === 0;
