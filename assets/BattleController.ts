@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Component, Graphics, Label, Node, UITransform } from 'cc';
+import { _decorator, Button, Color, Component, EffectAsset, Graphics, Label, Material, Node, Sprite, SpriteFrame, Texture2D, Tween, UIOpacity, UITransform, Vec3, tween } from 'cc';
 import { battleConfig } from './BattleConfig';
 import { advanceEncounter, battleOutcome, resolveTurn, runStatus, startRun } from './logic/Battle';
 import type { BattleAction } from './logic/Battle';
@@ -7,8 +7,30 @@ const buttonColor = new Color(54, 89, 138);
 const disabledButtonColor = new Color(75, 75, 75);
 const chargingNameColor = new Color(255, 105, 105);
 
+const presentation = {
+    actorSize: 196, actorY: 14, floatY: 72, floatRise: 42,
+    poseTime: 0.4, counterDelay: 0.16, flashTime: 0.1, floatTime: 0.58,
+    recoil: 18, kickTime: 0.045, returnTime: 0.15, shake: 7, redOpacity: 65,
+    chargeScale: 1.12, chargeBreath: 0.045, buttonPulse: 0.06, pulseTime: 0.36,
+} as const;
+
+// Order matches the scene's texture references.
+enum Pose { HeroIdle, HeroAttack, HeroDefend, HeroHurt, SlimeIdle, SlimeCharge, SlimeHeavy, SlimeHurt, SlimeStunned }
+type Actor = { sprite: Sprite; white: Sprite; x: number };
+
 @_decorator.ccclass('BattleController')
 export class BattleController extends Component {
+    @_decorator.property([Texture2D])
+    private poseTextures: Texture2D[] = [];
+
+    @_decorator.property(EffectAsset)
+    private hitFlashEffect: EffectAsset | null = null;
+
+    private frames: SpriteFrame[];
+    private heroArt: Actor;
+    private slimeArt: Actor;
+    private effects: Node;
+    private redFlash: UIOpacity;
     private ui: Node;
     private heroHP: Label;
     private rageLabel: Label;
@@ -36,17 +58,20 @@ export class BattleController extends Component {
         this.node.addChild(this.ui);
         this.encounterLabel = this.label(this.ui, 'Encounter', '', 230, 200, 24);
 
-        this.panel(this.ui, 'Hero', -155, 85, 270, 140, new Color(37, 59, 87));
-        this.panel(this.ui, 'Slime', 155, 85, 270, 140, new Color(33, 72, 64));
-        this.label(this.ui, 'HeroMark', '◆', -155, 113, 38, new Color(150, 202, 255));
-        this.label(this.ui, 'SlimeMark', '●', 155, 113, 42, new Color(144, 237, 170));
-        this.heroHP = this.label(this.ui, 'HeroHP', '', -155, 62, 26);
-        this.rageLabel = this.label(this.ui, 'Rage', '', -155, 32, 20);
-        this.slimeName = this.label(this.ui, 'SlimeName', '史莱姆', 94, 62, 26);
-        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 205, 62, 26);
-        this.panel(this.ui, 'LogPanel', 0, -71, 580, 140, new Color(26, 33, 46));
-        this.label(this.ui, 'LogTitle', '战斗日志', 0, -23, 22, new Color(184, 203, 226));
-        this.log = this.label(this.ui, 'BattleLog', '', 0, -88, 24);
+        this.frames = this.poseTextures.map(texture => Object.assign(new SpriteFrame(), { texture }));
+        const flashMaterial = new Material();
+        flashMaterial.initialize({ effectAsset: this.hitFlashEffect! });
+        this.heroArt = this.actor('HeroArt', -155, flashMaterial);
+        this.slimeArt = this.actor('SlimeArt', 155, flashMaterial);
+        this.panel(this.ui, 'Hero', -155, 142, 270, 72, new Color(37, 59, 87));
+        this.panel(this.ui, 'Slime', 155, 142, 270, 72, new Color(33, 72, 64));
+        this.heroHP = this.label(this.ui, 'HeroHP', '', -155, 153, 26);
+        this.rageLabel = this.label(this.ui, 'Rage', '', -155, 125, 20);
+        this.slimeName = this.label(this.ui, 'SlimeName', '史莱姆', 94, 142, 26);
+        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 205, 142, 26);
+        this.panel(this.ui, 'LogPanel', 0, -155, 580, 140, new Color(26, 33, 46));
+        this.label(this.ui, 'LogTitle', '战斗日志', 0, -107, 22, new Color(184, 203, 226));
+        this.log = this.label(this.ui, 'BattleLog', '', 0, -172, 24);
 
         this.attack = this.button('攻击', -200, () => this.playTurn('attack'));
         this.defend = this.button('防御', 0, () => this.playTurn('defend'));
@@ -56,10 +81,16 @@ export class BattleController extends Component {
             const next = advanceEncounter(this.run);
             if (next) this.resetBattle(next);
         });
+        this.effects = this.child(this.ui, 'Feedback', 0, 0);
+        const { width, height } = this.node.getComponent(UITransform)!;
+        this.redFlash = this.panel(this.node, 'HeavyFlash', 0, 0, width, height, new Color(220, 18, 35)).addComponent(UIOpacity);
         this.resetBattle();
     }
 
     private resetBattle(run = startRun()) {
+        this.clearFeedback();
+        this.pose(this.heroArt, Pose.HeroIdle);
+        this.pose(this.slimeArt, Pose.SlimeIdle);
         this.run = run;
         this.locked = false;
         this.messages = ['史莱姆出现了！勇者先行动。'];
@@ -72,6 +103,7 @@ export class BattleController extends Component {
         const result = resolveTurn(this.battle, action);
         if (!result) return;
         this.run.battle = result.state;
+        this.playFeedback(action, result, heavy);
         this.locked = true;
 
         const { strike, interrupted, counter } = result;
@@ -117,9 +149,103 @@ export class BattleController extends Component {
         this.charge.node.active = !ended;
         this.charge.interactable = this.attack.interactable && this.battle.rage === battleConfig.rage.max;
         const chargeNode = this.charge.node;
-        this.paintPanel(chargeNode, this.charge.interactable ? buttonColor : disabledButtonColor);
+        Tween.stopAllByTarget(chargeNode);
+        chargeNode.setScale(1, 1, 1);
+        this.paintPanel(chargeNode, this.charge.interactable ? new Color(67, 133, 203) : disabledButtonColor);
+        if (this.charge.interactable) this.pulse(chargeNode, 1, presentation.buttonPulse);
         this.next.node.active = status === 'next';
         this.restart.node.active = status === 'defeat' || status === 'cleared';
+    }
+
+    private actor(name: string, x: number, material: Material): Actor {
+        const body = this.child(this.ui, name, x, presentation.actorY);
+        const sprite = body.addComponent(Sprite);
+        const white = this.child(body, 'WhiteFlash', 0, 0).addComponent(Sprite);
+        for (const layer of [sprite, white]) {
+            layer.sizeMode = Sprite.SizeMode.CUSTOM;
+            layer.trim = false;
+            layer.node.getComponent(UITransform)!.setContentSize(presentation.actorSize, presentation.actorSize);
+        }
+        white.customMaterial = material;
+        white.node.active = false;
+        return { sprite, white, x };
+    }
+
+    private pose(actor: Actor, index: number) {
+        actor.sprite.spriteFrame = actor.white.spriteFrame = this.frames[index];
+    }
+
+    private clearFeedback() {
+        for (const target of [this.effects, this.ui, this.redFlash]) Tween.stopAllByTarget(target);
+        this.ui.setPosition(0, 0);
+        this.redFlash.opacity = 0;
+        for (const actor of [this.heroArt, this.slimeArt]) {
+            Tween.stopAllByTarget(actor.sprite.node);
+            Tween.stopAllByTarget(actor.white.node);
+            actor.white.node.active = false;
+            actor.sprite.node.setPosition(actor.x, presentation.actorY);
+            actor.sprite.node.setScale(1, 1, 1);
+        }
+        for (const node of [...this.effects.children]) {
+            Tween.stopAllByTarget(node.getComponent(UIOpacity)!);
+            node.destroy();
+        }
+    }
+
+    private floatText(value: string, x: number, size: number, color: Color) {
+        const node = this.label(this.effects, 'Feedback', value, x, presentation.floatY, size, color).node;
+        const fade = node.addComponent(UIOpacity);
+        tween(fade).to(presentation.floatTime, { opacity: 0 }, {
+            onUpdate: (_, ratio = 0) => node.setPosition(x, presentation.floatY + presentation.floatRise * ratio),
+        }).call(() => node.destroy()).start();
+    }
+
+    private hit(actor: Actor, damage: number, heavy = false) {
+        actor.white.node.active = true;
+        tween(actor.white.node).delay(presentation.flashTime).call(() => { actor.white.node.active = false; }).start();
+        const offset = Math.sign(actor.x) * presentation.recoil;
+        tween(actor.sprite.node)
+            .to(presentation.kickTime, { position: new Vec3(actor.x + offset, presentation.actorY) })
+            .to(presentation.returnTime, { position: new Vec3(actor.x, presentation.actorY) }).start();
+        this.floatText(`−${damage}`, actor.x, heavy ? 52 : 34, heavy ? new Color(255, 97, 78) : Color.WHITE);
+    }
+
+    private playFeedback(action: BattleAction, result: NonNullable<ReturnType<typeof resolveTurn>>, heavy: boolean) {
+        this.clearFeedback();
+        const { strike, interrupted, counter } = result;
+        this.pose(this.heroArt, action === 'defend' ? Pose.HeroDefend : Pose.HeroAttack);
+        this.pose(this.slimeArt, interrupted ? Pose.SlimeStunned : strike ? Pose.SlimeHurt : Pose.SlimeIdle);
+        if (strike) this.hit(this.slimeArt, strike);
+        if (interrupted) this.floatText('打断！', 0, 54, new Color(255, 213, 93));
+
+        const sequence = tween(this.effects);
+        if (counter) sequence.delay(presentation.counterDelay).call(() => {
+            this.pose(this.heroArt, Pose.HeroHurt);
+            this.hit(this.heroArt, counter.damage, heavy);
+            if (heavy) {
+                this.pose(this.slimeArt, Pose.SlimeHeavy);
+                this.redFlash.opacity = presentation.redOpacity;
+                tween(this.redFlash).to(presentation.flashTime, { opacity: 0 }).start();
+                tween(this.ui).to(presentation.kickTime, { position: new Vec3(presentation.shake, 0) })
+                    .to(presentation.kickTime, { position: new Vec3(-presentation.shake, 0) })
+                    .to(presentation.kickTime, { position: new Vec3() }).start();
+            }
+            if (result.state.slimeCharging) {
+                this.pose(this.slimeArt, Pose.SlimeCharge);
+                this.pulse(this.slimeArt.sprite.node, presentation.chargeScale, presentation.chargeBreath);
+            }
+        });
+        sequence.delay(presentation.poseTime).call(() => {
+            this.pose(this.heroArt, Pose.HeroIdle);
+            if (!interrupted && !result.state.slimeCharging) this.pose(this.slimeArt, Pose.SlimeIdle);
+        }).start();
+    }
+
+    private pulse(node: Node, scale: number, amplitude: number) {
+        node.setScale(scale, scale, 1);
+        tween(node).repeatForever(tween<Node>()
+            .to(presentation.pulseTime, { scale: new Vec3(scale + amplitude, scale + amplitude, 1) })
+            .to(presentation.pulseTime, { scale: new Vec3(scale, scale, 1) })).start();
     }
 
     private child(parent: Node, name: string, x: number, y: number) {
@@ -158,7 +284,7 @@ export class BattleController extends Component {
     }
 
     private button(text: string, x: number, click: () => void) {
-        const node = this.panel(this.ui, text, x, -191, 178, 60, buttonColor);
+        const node = this.panel(this.ui, text, x, -274, 178, 60, buttonColor);
         const button = node.addComponent(Button);
         button.target = node;
         this.label(node, 'Caption', text, 0, 0, 28);
