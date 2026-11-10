@@ -1,5 +1,7 @@
 import { _decorator, Button, Color, Component, Graphics, Label, Node, UITransform } from 'cc';
 import { battleConfig } from './BattleConfig';
+import { battleOutcome, resolveTurn, startBattle } from './logic/Battle';
+import type { BattleAction } from './logic/Battle';
 
 const buttonColor = new Color(54, 89, 138);
 const disabledButtonColor = new Color(75, 75, 75);
@@ -17,11 +19,7 @@ export class BattleController extends Component {
     private defend: Button;
     private charge: Button;
     private restart: Button;
-    private hero = 0;
-    private slime = 0;
-    private turn = 0;
-    private slimeCharging = false;
-    private rage = 0;
+    private battle = startBattle();
     private locked = false;
     private messages: string[] = [];
 
@@ -51,57 +49,39 @@ export class BattleController extends Component {
     }
 
     private resetBattle() {
-        this.hero = battleConfig.hero.hp;
-        this.slime = battleConfig.slime.hp;
-        this.turn = 0;
-        this.slimeCharging = false;
-        this.rage = 0;
+        this.battle = startBattle();
         this.locked = false;
         this.messages = ['史莱姆出现了！勇者先行动。'];
         this.render();
     }
 
-    private playTurn(action: 'attack' | 'defend' | 'charge') {
-        if (this.locked || this.hero === 0 || this.slime === 0) return;
-        if (action === 'charge' && this.rage < battleConfig.rage.max) return;
-        const defending = action === 'defend';
-        const heavy = this.slimeCharging;
-        const interrupted = action === 'charge' && heavy;
-        this.slimeCharging = false;
+    private playTurn(action: BattleAction) {
+        if (this.locked) return;
+        const { slimeCharging: heavy } = this.battle;
+        const result = resolveTurn(this.battle, action);
+        if (!result) return;
+        this.battle = result.state;
         this.locked = true;
-        this.turn++;
 
-        let strike = 0;
-        if (!defending) strike = interrupted ? battleConfig.rage.chargedDamage : this.roll(battleConfig.hero.damage);
-        if (action === 'charge') {
-            this.rage = 0;
-        }
-        this.slime = Math.max(0, this.slime - strike);
+        const { strike, interrupted, counter } = result;
+        const defending = action === 'defend';
         let message = defending ? '勇者防御' : `勇者攻击，造成 ${strike} 点伤害`;
         if (action === 'charge') message = `勇者蓄力攻击，造成 ${strike} 点伤害`;
         if (interrupted) message += '，打断史莱姆重击！';
-        if (this.slime > 0 && !interrupted) {
-            const { damage: range, heavyMultiplier } = battleConfig.slime;
-            const strikeBack = this.roll(range) * (heavy ? heavyMultiplier : 1);
-            const damage = defending ? Math.ceil(strikeBack * battleConfig.defenseMultiplier) : strikeBack;
-            const hpLost = Math.min(this.hero, damage);
-            this.hero -= hpLost;
-            const gained = Math.min(battleConfig.rage.max - this.rage, Math.ceil(hpLost / battleConfig.rage.hpPerPoint));
-            this.rage += gained;
-            message += defending ? `，抵挡${heavy ? '重击' : ''} ${strikeBack - damage} 点，受到 ${damage} 点伤害。`
+        if (counter) {
+            const { damage, blocked, gained } = counter;
+            message += defending ? `，抵挡${heavy ? '重击' : ''} ${blocked} 点，受到 ${damage} 点伤害。`
                 : `，史莱姆${heavy ? '重击' : '反击'} ${damage} 点。`;
             if (gained > 0) message += `\n怒气 +${gained}`;
         }
         this.messages.push(...message.split('\n'));
-        if (this.hero > 0 && this.slime > 0 && (this.turn + 1) % battleConfig.slime.heavyEvery === 0) {
-            this.slimeCharging = true;
-            this.messages.push('史莱姆正在蓄力，下回合将发动重击！');
-        }
-        if (this.slime === 0) this.messages.push('胜利！勇者击败了史莱姆。');
-        if (this.hero === 0) this.messages.push('战败！勇者倒下了。');
+        if (this.battle.slimeCharging) this.messages.push('史莱姆正在蓄力，下回合将发动重击！');
+        const outcome = battleOutcome(this.battle);
+        if (outcome === 'victory') this.messages.push('胜利！勇者击败了史莱姆。');
+        if (outcome === 'defeat') this.messages.push('战败！勇者倒下了。');
         this.render();
 
-        if (this.hero > 0 && this.slime > 0) {
+        if (!outcome) {
             this.scheduleOnce(() => {
                 this.locked = false;
                 this.render();
@@ -110,24 +90,20 @@ export class BattleController extends Component {
     }
 
     private render() {
-        this.heroHP.string = `勇者   HP ${this.hero} / ${battleConfig.hero.hp}`;
-        this.rageLabel.string = `怒气 ${this.rage}/${battleConfig.rage.max}`;
-        this.slimeName.color = this.slimeCharging ? chargingNameColor : Color.WHITE;
-        this.slimeHP.string = `HP ${this.slime} / ${battleConfig.slime.hp}`;
+        this.heroHP.string = `勇者   HP ${this.battle.hero} / ${battleConfig.hero.hp}`;
+        this.rageLabel.string = `怒气 ${this.battle.rage}/${battleConfig.rage.max}`;
+        this.slimeName.color = this.battle.slimeCharging ? chargingNameColor : Color.WHITE;
+        this.slimeHP.string = `HP ${this.battle.slime} / ${battleConfig.slime.hp}`;
         this.messages = this.messages.slice(-3);
         this.log.string = this.messages.join('\n');
-        const ended = this.hero === 0 || this.slime === 0;
+        const ended = battleOutcome(this.battle) !== null;
         this.attack.node.active = this.defend.node.active = !ended;
         this.attack.interactable = this.defend.interactable = !ended && !this.locked;
         this.charge.node.active = !ended;
-        this.charge.interactable = this.attack.interactable && this.rage === battleConfig.rage.max;
+        this.charge.interactable = this.attack.interactable && this.battle.rage === battleConfig.rage.max;
         const chargeNode = this.charge.node;
         this.paintPanel(chargeNode, this.charge.interactable ? buttonColor : disabledButtonColor);
         this.restart.node.active = ended;
-    }
-
-    private roll([min, max]: readonly [number, number]) {
-        return min + Math.floor(Math.random() * (max - min + 1));
     }
 
     private child(parent: Node, name: string, x: number, y: number) {
