@@ -1,6 +1,6 @@
 import { _decorator, Button, Color, Component, Graphics, Label, Node, UITransform } from 'cc';
 import { battleConfig } from './BattleConfig';
-import { battleOutcome, resolveTurn, startBattle } from './logic/Battle';
+import { advanceEncounter, battleOutcome, resolveTurn, runStatus, startRun } from './logic/Battle';
 import type { BattleAction } from './logic/Battle';
 
 const buttonColor = new Color(54, 89, 138);
@@ -19,7 +19,13 @@ export class BattleController extends Component {
     private defend: Button;
     private charge: Button;
     private restart: Button;
-    private battle = startBattle();
+    private next: Button;
+    private encounterLabel: Label;
+    private run = startRun();
+
+    private get battle() {
+        return this.run.battle;
+    }
     private locked = false;
     private messages: string[] = [];
 
@@ -28,6 +34,7 @@ export class BattleController extends Component {
         this.ui = new Node('BattleUI');
         this.ui.layer = this.node.layer;
         this.node.addChild(this.ui);
+        this.encounterLabel = this.label(this.ui, 'Encounter', '', 230, 200, 24);
 
         this.panel(this.ui, 'Hero', -155, 85, 270, 140, new Color(37, 59, 87));
         this.panel(this.ui, 'Slime', 155, 85, 270, 140, new Color(33, 72, 64));
@@ -45,11 +52,15 @@ export class BattleController extends Component {
         this.defend = this.button('防御', 0, () => this.playTurn('defend'));
         this.charge = this.button('蓄力攻击', 200, () => this.playTurn('charge'));
         this.restart = this.button('重新开始', 0, () => this.resetBattle());
+        this.next = this.button('下一场', 0, () => {
+            const next = advanceEncounter(this.run);
+            if (next) this.resetBattle(next);
+        });
         this.resetBattle();
     }
 
-    private resetBattle() {
-        this.battle = startBattle();
+    private resetBattle(run = startRun()) {
+        this.run = run;
         this.locked = false;
         this.messages = ['史莱姆出现了！勇者先行动。'];
         this.render();
@@ -60,7 +71,7 @@ export class BattleController extends Component {
         const { slimeCharging: heavy } = this.battle;
         const result = resolveTurn(this.battle, action);
         if (!result) return;
-        this.battle = result.state;
+        this.run.battle = result.state;
         this.locked = true;
 
         const { strike, interrupted, counter } = result;
@@ -77,7 +88,9 @@ export class BattleController extends Component {
         this.messages.push(...message.split('\n'));
         if (this.battle.slimeCharging) this.messages.push('史莱姆正在蓄力，下回合将发动重击！');
         const outcome = battleOutcome(this.battle);
-        if (outcome === 'victory') this.messages.push('胜利！勇者击败了史莱姆。');
+        if (outcome === 'victory') {
+            this.messages.push(runStatus(this.run) === 'cleared' ? '通关！' : '胜利！勇者击败了史莱姆。');
+        }
         if (outcome === 'defeat') this.messages.push('战败！勇者倒下了。');
         this.render();
 
@@ -90,20 +103,23 @@ export class BattleController extends Component {
     }
 
     private render() {
+        this.encounterLabel.string = `第 ${this.run.encounter}/${battleConfig.encounterCount} 场`;
         this.heroHP.string = `勇者   HP ${this.battle.hero} / ${battleConfig.hero.hp}`;
         this.rageLabel.string = `怒气 ${this.battle.rage}/${battleConfig.rage.max}`;
         this.slimeName.color = this.battle.slimeCharging ? chargingNameColor : Color.WHITE;
         this.slimeHP.string = `HP ${this.battle.slime} / ${battleConfig.slime.hp}`;
         this.messages = this.messages.slice(-3);
         this.log.string = this.messages.join('\n');
-        const ended = battleOutcome(this.battle) !== null;
+        const status = runStatus(this.run);
+        const ended = status !== null;
         this.attack.node.active = this.defend.node.active = !ended;
         this.attack.interactable = this.defend.interactable = !ended && !this.locked;
         this.charge.node.active = !ended;
         this.charge.interactable = this.attack.interactable && this.battle.rage === battleConfig.rage.max;
         const chargeNode = this.charge.node;
         this.paintPanel(chargeNode, this.charge.interactable ? buttonColor : disabledButtonColor);
-        this.restart.node.active = ended;
+        this.next.node.active = status === 'next';
+        this.restart.node.active = status === 'defeat' || status === 'cleared';
     }
 
     private child(parent: Node, name: string, x: number, y: number) {
