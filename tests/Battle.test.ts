@@ -15,6 +15,7 @@ describe('battle settlement', () => {
         const result = resolveTurn(startBattle(), 'defend', () => 0.5)!;
         expect(result.counter).toEqual({ damage: 3, blocked: 2, gained: 2 });
         expect(result.state).toMatchObject({ hero: 27, slime: 42, rage: 2 });
+        expect(resolveTurn(startBattle(), 'defend', high)!.counter).toEqual({ damage: 3, blocked: 3, gained: 2 });
     });
 
     it('gains rage only for HP actually lost and floors hero HP at zero', () => {
@@ -36,16 +37,24 @@ describe('battle settlement', () => {
         expect(result.strike).toBe(6);
         expect(result.state).toMatchObject({ hero: 26, slime: 36, rage: 2 });
         expect(result.interrupted).toBe(false);
+        const lethal = resolveTurn({ ...startBattle(), hero: 1, rage: 6 }, 'charge', low)!;
+        expect(lethal.state).toMatchObject({ hero: 0, rage: 1 });
     });
 
     it('warns before a heavy hit and lets a charged attack cancel it', () => {
-        const warning = resolveTurn({ ...startBattle(), turn: 1, rage: 6 }, 'defend', low)!;
+        const first = resolveTurn({ ...startBattle(), rage: 6 }, 'defend', low)!;
+        expect(first.state).toMatchObject({ turn: 1, slimeCharging: false });
+        const warning = resolveTurn(first.state, 'defend', low)!;
+        expect(warning.counter?.damage).toBe(2);
+        expect(warning.state.turn).toBe(2);
         expect(warning.state.slimeCharging).toBe(true);
         const result = resolveTurn(warning.state, 'charge', low)!;
         expect(result).toMatchObject({ strike: 14, interrupted: true });
         expect(result.counter).toBeUndefined();
-        expect(result.state).toMatchObject({ hero: 28, slime: 28, rage: 0, slimeCharging: false });
-        expect(resolveTurn(warning.state, 'attack', low)!.counter?.damage).toBe(16);
+        expect(result.state).toMatchObject({ hero: warning.state.hero, slime: 28, rage: 0, turn: 3, slimeCharging: false });
+        const heavy = resolveTurn(warning.state, 'attack', low)!;
+        expect(heavy.counter?.damage).toBe(16);
+        expect(heavy.state).toMatchObject({ turn: 3, slimeCharging: false });
         expect(resolveTurn(warning.state, 'defend', low)!.counter?.damage).toBe(8);
     });
 
