@@ -8,7 +8,7 @@ const disabledButtonColor = new Color(75, 75, 75);
 const chargingNameColor = new Color(255, 105, 105);
 
 const presentation = {
-    actorSize: 196, actorY: 14, floatY: 72, floatRise: 42,
+    actorSize: 382, actorY: 40, floatY: 176, floatRise: 60,
     poseTime: 0.4, counterDelay: 0.16, flashTime: 0.1, floatTime: 0.58,
     recoil: 18, kickTime: 0.045, returnTime: 0.15, shake: 7, redOpacity: 65,
     chargeScale: 1.12, chargeBreath: 0.045, buttonPulse: 0.06, pulseTime: 0.36,
@@ -22,10 +22,8 @@ type Actor = { sprite: Sprite; white: Sprite; x: number };
 export class BattleController extends Component {
     @_decorator.property([Texture2D])
     private poseTextures: Texture2D[] = [];
-
     @_decorator.property(EffectAsset)
     private hitFlashEffect: EffectAsset | null = null;
-
     private frames: SpriteFrame[];
     private heroArt: Actor;
     private slimeArt: Actor;
@@ -56,26 +54,28 @@ export class BattleController extends Component {
         this.ui = new Node('BattleUI');
         this.ui.layer = this.node.layer;
         this.node.addChild(this.ui);
-        this.encounterLabel = this.label(this.ui, 'Encounter', '', 230, 200, 24);
+        this.encounterLabel = this.label(this.ui, 'Encounter', '', 245, 410, 30);
 
         this.frames = this.poseTextures.map(texture => Object.assign(new SpriteFrame(), { texture }));
         const flashMaterial = new Material();
         flashMaterial.initialize({ effectAsset: this.hitFlashEffect! });
-        this.heroArt = this.actor('HeroArt', -155, flashMaterial);
-        this.slimeArt = this.actor('SlimeArt', 155, flashMaterial);
-        this.panel(this.ui, 'Hero', -155, 142, 270, 72, new Color(37, 59, 87));
-        this.panel(this.ui, 'Slime', 155, 142, 270, 72, new Color(33, 72, 64));
-        this.heroHP = this.label(this.ui, 'HeroHP', '', -155, 153, 26);
-        this.rageLabel = this.label(this.ui, 'Rage', '', -155, 125, 20);
-        this.slimeName = this.label(this.ui, 'SlimeName', '史莱姆', 94, 142, 26);
-        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 205, 142, 26);
-        this.panel(this.ui, 'LogPanel', 0, -155, 580, 140, new Color(26, 33, 46));
-        this.label(this.ui, 'LogTitle', '战斗日志', 0, -107, 22, new Color(184, 203, 226));
-        this.log = this.label(this.ui, 'BattleLog', '', 0, -172, 24);
+        this.heroArt = this.actor('HeroArt', -181, flashMaterial);
+        this.slimeArt = this.actor('SlimeArt', 181, flashMaterial);
+        this.panel(this.ui, 'Hero', -181, 310, 338, 112, new Color(37, 59, 87));
+        this.panel(this.ui, 'Slime', 181, 310, 338, 112, new Color(33, 72, 64));
+        this.heroHP = this.label(this.ui, 'HeroHP', '', -181, 331, 34);
+        this.rageLabel = this.label(this.ui, 'Rage', '', -181, 286, 28);
+        this.slimeName = this.label(this.ui, 'SlimeName', '史莱姆', 181, 331, 34);
+        this.slimeHP = this.label(this.ui, 'SlimeHP', '', 181, 286, 32);
+        this.panel(this.ui, 'LogPanel', 0, -239, 700, 220, new Color(26, 33, 46));
+        this.label(this.ui, 'LogTitle', '战斗日志', 0, -159, 28, new Color(184, 203, 226));
+        this.log = this.label(this.ui, 'BattleLog', '', 0, -256, 32);
+        this.log.overflow = Label.Overflow.RESIZE_HEIGHT;
+        this.log.node.getComponent(UITransform)!.setContentSize(650, 0);
 
-        this.attack = this.button('攻击', -200, () => this.playTurn('attack'));
+        this.attack = this.button('攻击', -235, () => this.playTurn('attack'));
         this.defend = this.button('防御', 0, () => this.playTurn('defend'));
-        this.charge = this.button('蓄力攻击', 200, () => this.playTurn('charge'));
+        this.charge = this.button('蓄力攻击', 235, () => this.playTurn('charge'));
         this.restart = this.button('重新开始', 0, () => this.resetBattle());
         this.next = this.button('下一场', 0, () => {
             const next = advanceEncounter(this.run);
@@ -284,10 +284,10 @@ export class BattleController extends Component {
     }
 
     private button(text: string, x: number, click: () => void) {
-        const node = this.panel(this.ui, text, x, -274, 178, 60, buttonColor);
+        const node = this.panel(this.ui, text, x, -415, 216, 96, buttonColor);
         const button = node.addComponent(Button);
         button.target = node;
-        this.label(node, 'Caption', text, 0, 0, 28);
+        this.label(node, 'Caption', text, 0, 0, 36);
         node.on(Button.EventType.CLICK, click, this);
         return button;
     }
