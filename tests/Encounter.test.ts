@@ -9,7 +9,7 @@ function play(run: ReturnType<typeof startRun>, actions: BattleAction[]) {
     return run;
 }
 
-const win: BattleAction[] = ['attack', 'attack', 'charge', 'attack', 'attack'];
+const win: BattleAction[] = ['attack', 'attack', 'attack', 'charge', 'attack', 'attack'];
 
 describe('consecutive encounters', () => {
     it('opens encounter two after victory and resets the battle', () => {
@@ -17,7 +17,7 @@ describe('consecutive encounters', () => {
         expect(runStatus(firstWin)).toBe('next');
         const second = advanceEncounter(firstWin)!;
         expect(second.encounter).toBe(2);
-        expect(second.battle).toEqual({ hero: 30, slime: 42, rage: 0, turn: 0, slimeCharging: false });
+        expect(second.battle).toEqual({ hero: 30, slime: 49, rage: 0, turn: 0, slimeCharging: false });
     });
 
     it('clears the run after the second victory', () => {
@@ -29,12 +29,12 @@ describe('consecutive encounters', () => {
 
     it('allows a fresh run from encounter one after defeat in encounter two', () => {
         const second = advanceEncounter(play(startRun(), win))!;
-        const defeated = play(second, ['attack', 'attack', 'attack']);
+        const defeated = play(second, ['attack', 'attack', 'attack', 'attack']);
         expect(runStatus(defeated)).toBe('defeat');
         expect(advanceEncounter(defeated)).toBeNull();
         expect(startRun()).toEqual({
             encounter: 1,
-            battle: { hero: 30, slime: 42, rage: 0, turn: 0, slimeCharging: false },
+            battle: { hero: 30, slime: 49, rage: 0, turn: 0, slimeCharging: false },
         });
     });
 
