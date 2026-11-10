@@ -12,11 +12,14 @@ const presentation = {
     poseTime: 0.4, counterDelay: 0.16, flashTime: 0.1, floatTime: 0.58,
     recoil: 18, kickTime: 0.045, returnTime: 0.15, shake: 7, redOpacity: 65,
     chargeScale: 1.12, chargeBreath: 0.045, buttonPulse: 0.06, pulseTime: 0.36,
+    lockedOpacity: 210, resultDelay: 0.6, fallTime: 0.24, fadeTime: 0.22,
+    heroFallAngle: -80, heroSink: 38, heroBrightness: 0.6,
+    slimeSquash: 0.5, slimeSink: 80, slimeOpacity: 0.3,
 } as const;
 
 // Order matches the scene's texture references.
 enum Pose { HeroIdle, HeroAttack, HeroDefend, HeroHurt, SlimeIdle, SlimeCharge, SlimeHeavy, SlimeHurt, SlimeStunned }
-type Actor = { sprite: Sprite; white: Sprite; x: number };
+type Actor = { sprite: Sprite; white: Sprite; opacity: UIOpacity; x: number };
 
 @_decorator.ccclass('BattleController')
 export class BattleController extends Component {
@@ -103,7 +106,6 @@ export class BattleController extends Component {
         const result = resolveTurn(this.battle, action);
         if (!result) return;
         this.run.battle = result.state;
-        this.playFeedback(action, result, heavy);
         this.locked = true;
 
         const { strike, interrupted, counter } = result;
@@ -119,19 +121,8 @@ export class BattleController extends Component {
         }
         this.messages.push(...message.split('\n'));
         if (this.battle.slimeCharging) this.messages.push('史莱姆正在蓄力，下回合将发动重击！');
-        const outcome = battleOutcome(this.battle);
-        if (outcome === 'victory') {
-            this.messages.push(runStatus(this.run) === 'cleared' ? '通关！' : '胜利！勇者击败了史莱姆。');
-        }
-        if (outcome === 'defeat') this.messages.push('战败！勇者倒下了。');
         this.render();
-
-        if (!outcome) {
-            this.scheduleOnce(() => {
-                this.locked = false;
-                this.render();
-            }, battleConfig.turnLockSeconds);
-        }
+        this.playFeedback(action, result, heavy);
     }
 
     private render() {
@@ -153,8 +144,11 @@ export class BattleController extends Component {
         chargeNode.setScale(1, 1, 1);
         this.paintPanel(chargeNode, this.charge.interactable ? new Color(67, 133, 203) : disabledButtonColor);
         if (this.charge.interactable) this.pulse(chargeNode, 1, presentation.buttonPulse);
-        this.next.node.active = status === 'next';
-        this.restart.node.active = status === 'defeat' || status === 'cleared';
+        for (const button of [this.attack, this.defend, this.charge]) {
+            button.node.getComponent(UIOpacity)!.opacity = this.locked ? presentation.lockedOpacity : 255;
+        }
+        this.next.node.active = !this.locked && status === 'next';
+        this.restart.node.active = !this.locked && (status === 'defeat' || status === 'cleared');
     }
 
     private actor(name: string, x: number, material: Material): Actor {
@@ -168,7 +162,7 @@ export class BattleController extends Component {
         }
         white.customMaterial = material;
         white.node.active = false;
-        return { sprite, white, x };
+        return { sprite, white, opacity: body.addComponent(UIOpacity), x };
     }
 
     private pose(actor: Actor, index: number) {
@@ -185,6 +179,10 @@ export class BattleController extends Component {
             actor.white.node.active = false;
             actor.sprite.node.setPosition(actor.x, presentation.actorY);
             actor.sprite.node.setScale(1, 1, 1);
+            actor.sprite.node.angle = 0;
+            actor.sprite.color = Color.WHITE;
+            Tween.stopAllByTarget(actor.opacity);
+            actor.opacity.opacity = 255;
         }
         for (const node of [...this.effects.children]) {
             Tween.stopAllByTarget(node.getComponent(UIOpacity)!);
@@ -235,10 +233,52 @@ export class BattleController extends Component {
                 this.pulse(this.slimeArt.sprite.node, presentation.chargeScale, presentation.chargeBreath);
             }
         });
+        const outcome = battleOutcome(result.state);
         sequence.delay(presentation.poseTime).call(() => {
+            if (outcome) {
+                this.showOutcome(outcome);
+                this.render();
+                return;
+            }
             this.pose(this.heroArt, Pose.HeroIdle);
             if (!interrupted && !result.state.slimeCharging) this.pose(this.slimeArt, Pose.SlimeIdle);
+        });
+
+        const hitTime = Math.max(presentation.floatTime, presentation.flashTime,
+            presentation.kickTime + presentation.returnTime, counter && heavy ? 3 * presentation.kickTime : 0);
+        const remainingHitTime = Math.max(0, hitTime - presentation.poseTime);
+        const remainingTime = outcome
+            ? Math.max(remainingHitTime, presentation.resultDelay, presentation.fallTime + presentation.fadeTime)
+            : remainingHitTime;
+        sequence.delay(remainingTime).call(() => {
+            this.locked = false;
+            this.render();
         }).start();
+    }
+
+    private showOutcome(outcome: 'victory' | 'defeat') {
+        if (outcome === 'defeat') {
+            this.pose(this.slimeArt, Pose.SlimeIdle);
+            this.pose(this.heroArt, Pose.HeroHurt);
+            const shade = Math.round(255 * presentation.heroBrightness);
+            this.heroArt.sprite.color = new Color(shade, shade, shade);
+            tween(this.heroArt.sprite.node).to(presentation.fallTime, {
+                angle: presentation.heroFallAngle,
+                position: new Vec3(this.heroArt.x, presentation.actorY - presentation.heroSink),
+            }).start();
+            this.messages.push('战败！勇者倒下了。');
+            return;
+        }
+
+        this.pose(this.heroArt, Pose.HeroIdle);
+        this.pose(this.slimeArt, Pose.SlimeStunned);
+        tween(this.slimeArt.sprite.node).to(presentation.fallTime, {
+            scale: new Vec3(1, presentation.slimeSquash, 1),
+            position: new Vec3(this.slimeArt.x, presentation.actorY - presentation.slimeSink),
+        }).start();
+        tween(this.slimeArt.opacity).delay(presentation.fallTime)
+            .to(presentation.fadeTime, { opacity: Math.round(255 * presentation.slimeOpacity) }).start();
+        this.messages.push(runStatus(this.run) === 'cleared' ? '通关！' : '胜利！勇者击败了史莱姆。');
     }
 
     private pulse(node: Node, scale: number, amplitude: number) {
@@ -285,6 +325,7 @@ export class BattleController extends Component {
 
     private button(text: string, x: number, click: () => void) {
         const node = this.panel(this.ui, text, x, -415, 216, 96, buttonColor);
+        node.addComponent(UIOpacity);
         const button = node.addComponent(Button);
         button.target = node;
         this.label(node, 'Caption', text, 0, 0, 36);
