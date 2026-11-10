@@ -43,3 +43,20 @@ export function resolveTurn(state: BattleState, action: BattleAction, random = M
     next.slimeCharging = !battleOutcome(next) && (next.turn + 1) % config.slime.heavyEvery === 0;
     return { state: next, strike, interrupted, counter };
 }
+
+export function startRun() {
+    return { encounter: 1, battle: startBattle() };
+}
+
+type BattleRun = ReturnType<typeof startRun>;
+
+export function runStatus(run: BattleRun) {
+    const outcome = battleOutcome(run.battle);
+    if (outcome !== 'victory') return outcome;
+    return run.encounter < config.encounterCount ? 'next' : 'cleared';
+}
+
+export function advanceEncounter(run: BattleRun): BattleRun | null {
+    if (runStatus(run) !== 'next') return null;
+    return { encounter: run.encounter + 1, battle: startBattle() };
+}

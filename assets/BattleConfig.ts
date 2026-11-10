@@ -1,4 +1,5 @@
 export const battleConfig = {
+    encounterCount: 2,
     hero: { hp: 30, damage: [6, 8] },
     rage: { hpPerPoint: 2, max: 6, chargedDamage: 14 },
     slime: { hp: 42, damage: [4, 6], heavyEvery: 3, heavyMultiplier: 4 },
