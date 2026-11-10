@@ -90,8 +90,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 640,
-      "y": 360.00000000000006,
+      "x": 375,
+      "y": 667,
       "z": 0
     },
     "_lrot": {
@@ -230,7 +230,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 200,
+      "y": 410,
       "z": 0
     },
     "_lrot": {
@@ -301,10 +301,10 @@
     "_string": "勇者大战史莱姆",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 36,
-    "_fontSize": 36,
+    "_actualFontSize": 46,
+    "_fontSize": 46,
     "_fontFamily": "Arial",
-    "_lineHeight": 40,
+    "_lineHeight": 50,
     "_overflow": 0,
     "_enableWrapText": true,
     "_font": null,
@@ -352,8 +352,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1280,
-      "height": 720
+      "width": 750,
+      "height": 1334
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -418,6 +418,18 @@
     },
     "_enabled": true,
     "__prefab": null,
+    "poseTextures": [
+      { "__uuid__": "15fcc91e-9795-4af5-91e6-51564db75031@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "4919d28b-632c-49cf-872e-5e2eabbba546@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "3db06848-016f-4361-9ce4-cedc26b22420@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "b3c04b1e-3d09-4844-8609-07a8762b7e1c@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "ea45d563-1bc0-40da-b5f7-0116243a98d1@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "45d1ed8f-b7c9-4998-8eb9-fd3076d0e05b@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "b9b639f8-ddfc-4415-9625-3bba445b54fe@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "b62ccde1-9b7f-43ff-a992-6b0681886dfd@6c48a", "__expectedType__": "cc.Texture2D" },
+      { "__uuid__": "1daabebe-95bb-445c-bd4d-0adaee648e34@6c48a", "__expectedType__": "cc.Texture2D" }
+    ],
+    "hitFlashEffect": { "__uuid__": "6e62f023-0d15-437e-8102-766e5202d550", "__expectedType__": "cc.EffectAsset" },
     "_id": "34YUThHtRJFbOdPo2Q15RK"
   },
   {

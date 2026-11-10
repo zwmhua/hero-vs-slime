@@ -1,0 +1,34 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: flash-vs:vert
+      frag: flash-fs:frag
+      depthStencilState: { depthTest: false, depthWrite: false }
+      blendState:
+        targets:
+        - { blend: true, blendSrc: src_alpha, blendDst: one_minus_src_alpha }
+      rasterizerState: { cullMode: none }
+}%
+
+CCProgram flash-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  out vec2 uv;
+  vec4 vert () {
+    uv = a_texCoord;
+    return cc_matViewProj * vec4(a_position, 1.0);
+  }
+}%
+
+CCProgram flash-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  in vec2 uv;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+  vec4 frag () {
+    return vec4(1.0, 1.0, 1.0, CCSampleWithAlphaSeparated(cc_spriteTexture, uv).a);
+  }
+}%
